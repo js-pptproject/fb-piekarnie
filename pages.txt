@@ -1,0 +1,8 @@
+# Lista fanpage'y do sledzenia - jeden pelny URL na linie.
+# Linie zaczynajace sie od # sa ignorowane.
+#
+# Wklej tutaj adresy fanpage'y konkurencji, ktore chcesz sledzic, np.:
+# https://www.facebook.com/nazwa-fanpage-1
+# https://www.facebook.com/nazwa-fanpage-2
+#
+# (plik celowo pusty z przykladu - uzupelnij realnymi adresami przed pierwszym uruchomieniem)

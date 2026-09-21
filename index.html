@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor fanpage&#39;y</title>
+<style>
+  :root {
+    --bg: #f6f5f2;
+    --panel: #ffffff;
+    --border: #e4e1da;
+    --text: #2a2825;
+    --muted: #7a7469;
+    --accent: #b5651d;
+    --ok: #4c7a3f;
+    --warn: #b5651d;
+    --err: #a83c3c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 24px 20px 16px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .status-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 14px 0 0;
+  }
+  .pill {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); border-color: #cfe0c8; }
+  .pill.warn { color: var(--warn); border-color: #f0d9bd; }
+  .pill.err { color: var(--err); border-color: #f0c8c8; }
+
+  .controls {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 20px 8px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  select, input {
+    font: inherit;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+  }
+
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 8px 20px 60px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .page-name {
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .time {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .badge-new {
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+  .text {
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .link {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .link:hover { text-decoration: underline; }
+  .empty {
+    color: var(--muted);
+    text-align: center;
+    padding: 60px 0;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Monitor fanpage&#39;y konkurencji</h1>
+  <div class="sub" id="lastUpdate">Wczytuje dane...</div>
+  <div class="status-strip" id="statusStrip"></div>
+</header>
+
+<div class="controls">
+  <label for="pageFilter" style="font-size:13px;color:var(--muted);">Strona:</label>
+  <select id="pageFilter">
+    <option value="">Wszystkie</option>
+  </select>
+</div>
+
+<main id="feed">
+  <div class="empty">Wczytuje posty...</div>
+</main>
+
+<script>
+const FEED_URL = "data/feed.json";
+const STATUS_URL = "data/status.json";
+const NEW_THRESHOLD_HOURS = 30; // posty scrapowane w tym oknie dostaja znaczek "NOWY"
+
+function timeAgo(iso) {
+  const d = new Date(iso);
+  const diffMs = Date.now() - d.getTime();
+  const h = diffMs / 36e5;
+  if (h < 1) return "mniej niz godzine temu";
+  if (h < 24) return Math.round(h) + " godz. temu";
+  return Math.round(h / 24) + " dni temu";
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function renderStatus(status) {
+  const strip = document.getElementById("statusStrip");
+  strip.innerHTML = "";
+  const labels = { ok: "ok", brak_postow: "brak postow", blokada: "blokada logowania", blad: "blad" };
+  Object.entries(status || {}).forEach(([slug, info]) => {
+    const cls = info.status === "ok" ? "ok" : (info.status === "blad" ? "err" : "warn");
+    const pill = document.createElement("span");
+    pill.className = "pill " + cls;
+    pill.title = info.message || "";
+    pill.textContent = slug + ": " + (labels[info.status] || info.status);
+    strip.appendChild(pill);
+  });
+}
+
+function renderFeed(items, filterPage) {
+  const main = document.getElementById("feed");
+  const filtered = filterPage ? items.filter(i => i.page === filterPage) : items;
+  if (filtered.length === 0) {
+    main.innerHTML = '<div class="empty">Brak postow do pokazania. Jesli to pierwsze uruchomienie, sprawdz czy workflow "Sprawdz fanpage\'e" juz sie wykonal (zakladka Actions).</div>';
+    return;
+  }
+  main.innerHTML = filtered.map(item => {
+    const isNew = (Date.now() - new Date(item.scraped_at).getTime()) < NEW_THRESHOLD_HOURS * 36e5;
+    const link = item.post_url
+      ? `<a class="link" href="${escapeHtml(item.post_url)}" target="_blank" rel="noopener">Zobacz na Facebooku &rarr;</a>`
+      : "";
+    return `<div class="card">
+      <div class="card-head">
+        <span class="page-name">${escapeHtml(item.page)}${isNew ? '<span class="badge-new">NOWY</span>' : ''}</span>
+        <span class="time">${timeAgo(item.scraped_at)}</span>
+      </div>
+      <div class="text">${escapeHtml(item.text)}</div>
+      ${link}
+    </div>`;
+  }).join("");
+}
+
+async function init() {
+  let feed = [];
+  let status = {};
+  try {
+    feed = await (await fetch(FEED_URL, { cache: "no-store" })).json();
+  } catch (e) {
+    document.getElementById("feed").innerHTML = '<div class="empty">Nie udalo sie wczytac data/feed.json.</div>';
+  }
+  try {
+    status = await (await fetch(STATUS_URL, { cache: "no-store" })).json();
+  } catch (e) { /* brak pliku statusu przy pierwszym uruchomieniu - to normalne */ }
+
+  document.getElementById("lastUpdate").textContent =
+    feed.length ? `${feed.length} postow w bazie - ostatni scraping: ${timeAgo(feed[0].scraped_at)}` : "Brak danych - poczekaj na pierwsze uruchomienie scrapera.";
+
+  renderStatus(status);
+
+  const pages = [...new Set(feed.map(i => i.page))].sort();
+  const sel = document.getElementById("pageFilter");
+  pages.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p; opt.textContent = p;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener("change", () => renderFeed(feed, sel.value));
+
+  renderFeed(feed, "");
+}
+
+init();
+</script>
+</body>
+</html>
