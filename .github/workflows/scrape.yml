@@ -1,0 +1,48 @@
+name: Sprawdz fanpage'e
+
+on:
+  schedule:
+    # co 4 godziny (czas UTC) - dopasuj ponizszy cron do wlasnych potrzeb
+    - cron: "0 */4 * * *"
+  workflow_dispatch: {}   # pozwala odpalic recznie z zakladki "Actions" na GitHubie
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Pobierz repozytorium
+        uses: actions/checkout@v4
+
+      - name: Ustaw Pythona
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Zainstaluj zaleznosci
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Uruchom scraper
+        run: python scraper.py
+
+      - name: Wgraj zrzuty debugowe (tylko jesli powstaly)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-${{ github.run_number }}
+          path: debug/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Zapisz zmiany (jesli sa nowe posty)
+        run: |
+          git config user.name "fb-monitor-bot"
+          git config user.email "fb-monitor-bot@users.noreply.github.com"
+          git add data/ debug/ 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "Auto-update: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
